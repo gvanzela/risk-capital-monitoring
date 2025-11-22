@@ -3,18 +3,37 @@ _Comprehensive documentation for the analytical data model used in the Risk Capi
 
 ---
 
-## 1. FUNDS_AUM_SNAPSHOT  
-**Description:** Latest available AUM (Assets Under Management) per fund.
+## 1. FUNDS_AUM_SNAPSHOT
+*(full fund snapshot for risk & AUM monitoring)*
 
-| Generic Column       | Type      | Description                               |
-|----------------------|-----------|-------------------------------------------|
-| fund_id              | INT       | Unique identifier for the fund           |
-| fund_name            | TEXT      | Fund name                                 |
-| fund_class           | TEXT      | CVM classification / fund strategy        |
-| manager_name         | TEXT      | Name of the portfolio manager             |
-| investor_type        | TEXT      | Target investor segment                   |
-| aum_value            | DECIMAL   | Total net assets (AUM)                    |
-| snapshot_timestamp   | DATETIME  | Ingestion timestamp                        |
+| Generic Column        | Type      | Description |
+|-----------------------|-----------|-------------|
+| fund_id               | INT       | Unique identifier of the fund |
+| as_of_date            | DATE      | Official reference date of the snapshot |
+| fund_name             | TEXT      | Fund’s legal name |
+| fund_cnpj             | TEXT      | Registration number / identifier |
+| manager_name          | TEXT      | Name of the asset manager |
+| investor_type         | TEXT      | Investor category (Retail, Qualified, Professional) |
+| portfolio_type        | TEXT      | Portfolio type / structure |
+| fund_class            | TEXT      | CVM / regulatory class |
+| fund_class_desc       | TEXT      | Additional class description |
+
+### Financial & Risk Metrics
+| Generic Column        | Type        | Description |
+|-----------------------|-------------|-------------|
+| aum_value             | DECIMAL     | Total AUM (Assets Under Management) |
+| liquidity_ratio       | DECIMAL     | Fund liquidity indicator |
+| return_daily          | DECIMAL     | Daily return (%) |
+| return_monthly        | DECIMAL     | MTD return (%) |
+| return_ytd            | DECIMAL     | YTD return (%) |
+| risk_rating           | TEXT        | Internal or external risk rating |
+| var_95                | DECIMAL     | 95% Value-at-Risk |
+| var_99                | DECIMAL     | 99% Value-at-Risk |
+
+### Operational
+| Generic Column        | Type        | Description |
+|-----------------------|-------------|-------------|
+| snapshot_timestamp    | DATETIME    | Load timestamp (ETL ingestion time) |
 
 ---
 
