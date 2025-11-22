@@ -60,16 +60,17 @@ A clean and practical engineering flow — the same logic used in production sys
 
 ## 3. Repository Structure
 
+```
 risk-capital-monitoring/
 │
-├── 1-data-model/ # SQL schema and data dictionary
-├── 2-api-simulation/ # API mock + sample JSON payloads
-├── 3-etl-pipelines/ # Ingestion pipelines (Python)
-├── 4-transform/ # SQL logic for exposure & margin consolidation
-├── 5-bi/ # BI mock, DAX notes, screenshots
+├── 1-data-model/         # SQL schema and data dictionary
+├── 2-api-simulation/     # API mock + sample JSON payloads
+├── 3-etl-pipelines/      # Ingestion pipelines (Python)
+├── 4-transform/          # SQL logic for exposure & margin consolidation
+├── 5-bi/                 # BI mock, DAX notes, screenshots
 │
 └── README.md
-
+```
 
 Each folder matches a real component of a data-engineering architecture.
 
