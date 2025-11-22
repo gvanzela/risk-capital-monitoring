@@ -1,14 +1,29 @@
 -- Data Model (MySQL)
 -- Minimal schema for the Risk Capital Monitoring project
 
-CREATE TABLE FUNDS_AUM_SNAPSHOT (
-    fund_id INT,
-    fund_name VARCHAR(200),
-    fund_class VARCHAR(200),
-    manager_name VARCHAR(200),
-    investor_type VARCHAR(100),
-    aum_value DECIMAL(20,2),
-    snapshot_timestamp DATETIME
+CREATE TABLE IF NOT EXISTS FUNDS_AUM_SNAPSHOT (
+    fund_id             INT             NOT NULL,
+    as_of_date          DATE            NOT NULL,
+    fund_name           VARCHAR(255),
+    fund_cnpj           VARCHAR(32),
+    manager_name        VARCHAR(255),
+    investor_type       VARCHAR(100),
+    portfolio_type      VARCHAR(100),
+    fund_class          VARCHAR(100),
+    fund_class_desc     VARCHAR(255),
+
+    aum_value           DECIMAL(20,6),
+
+    liquidity_ratio     DECIMAL(20,6),
+    return_daily        DECIMAL(20,6),
+    return_monthly      DECIMAL(20,6),
+    return_ytd          DECIMAL(20,6),
+
+    risk_rating         VARCHAR(50),
+    var_95              DECIMAL(20,6),
+    var_99              DECIMAL(20,6),
+
+    snapshot_timestamp  DATETIME        NOT NULL
 );
 
 CREATE TABLE FUNDS_AUM_HISTORY (
