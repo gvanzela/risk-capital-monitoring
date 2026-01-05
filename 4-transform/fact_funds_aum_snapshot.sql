@@ -1,6 +1,6 @@
 SELECT *
-FROM fact_funds_aum_snapshot
-WHERE load_timestamp = (
-    SELECT MAX(load_timestamp)
-    FROM fact_funds_aum_snapshot
+FROM TB_ENQ_PL_SNAPSHOT
+WHERE dt_carga = (
+    SELECT MAX(dt_carga)
+    FROM TB_ENQ_PL_SNAPSHOT
 );
