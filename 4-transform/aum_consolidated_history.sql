@@ -1,56 +1,54 @@
-WITH portfolios AS (
+WITH dados_cge AS (
     SELECT DISTINCT
-        portfolio_id,
-        fund_name,
-        fund_class
-    FROM fact_funds_aum_snapshot
-    WHERE load_timestamp = (
-        SELECT MAX(load_timestamp)
-        FROM fact_funds_aum_snapshot
-    )
+        cgePortfolio,
+        nomeFundo,
+        descClasseCvm
+    FROM TB_ENQ_PL_SNAPSHOT
+    WHERE dt_carga = (SELECT MAX(dt_carga) FROM TB_ENQ_PL_SNAPSHOT)
+    ORDER BY cgePortfolio
 ),
-
-aum_monthly AS (
+dados_pl AS (
     SELECT *
     FROM (
         SELECT
-            h.*,
+            t.*,
             ROW_NUMBER() OVER (
-                PARTITION BY portfolio_id, YEAR(aum_date), MONTH(aum_date)
-                ORDER BY aum_date DESC, load_timestamp DESC
+                PARTITION BY cgePortfolio, YEAR(`data`), MONTH(`data`)
+                ORDER BY `data` DESC, `dt_carga` DESC
             ) AS rn
-        FROM fact_funds_aum_history h
-    ) t
+        FROM TB_ENQ_PL_HISTORICO t
+    ) sub
     WHERE rn = 1
 ),
-
-margin_monthly AS (
-    SELECT *
-    FROM (
-        SELECT
-            portfolio_id,
-            YEAR(sent_date) AS y,
-            MONTH(sent_date) AS m,
-            sent_date,
-            ABS(COALESCE(local_margin,0)) + ABS(COALESCE(offshore_margin,0)) AS latest_margin,
-            ROW_NUMBER() OVER (
-                PARTITION BY portfolio_id, YEAR(sent_date), MONTH(sent_date)
-                ORDER BY sent_date DESC
-            ) AS rn
-        FROM fact_manager_margin_snapshot
-    ) mm
-    WHERE rn = 1
+margem_mes AS (
+SELECT *
+FROM (
+    SELECT 
+        CgePortfolio,
+        YEAR(DataEnvio)  AS AnoEnvio,
+        MONTH(DataEnvio) AS MesEnvio,
+        DataEnvio,
+        ABS(COALESCE(MargemLocal,0)) + ABS(COALESCE(MargemOffshore,0)) AS MargemMaisRecente,
+        ROW_NUMBER() OVER (
+            PARTITION BY CgePortfolio, YEAR(DataEnvio), MONTH(DataEnvio)
+            ORDER BY DataEnvio DESC
+        ) AS rn
+    FROM TB_ENQ_MARGEM_GESTOR_SNAPSHOT
+) A
+WHERE rn = 1
+),
+dados_final AS (
+    SELECT
+        a.nomeFundo,
+        a.descClasseCvm,
+        b.*,
+        m.MargemMaisRecente
+    FROM dados_cge a
+    LEFT JOIN dados_pl b
+        ON a.cgePortfolio = b.cgePortfolio
+    LEFT JOIN margem_mes m
+        ON b.cgePortfolio = m.CgePortfolio
+        AND YEAR(b.`data`) = m.AnoEnvio
+        AND MONTH(b.`data`) = m.MesEnvio
 )
-
-SELECT
-    p.fund_name,
-    p.fund_class,
-    a.*,
-    m.latest_margin
-FROM portfolios p
-LEFT JOIN aum_monthly a
-    ON p.portfolio_id = a.portfolio_id
-LEFT JOIN margin_monthly m
-    ON a.portfolio_id = m.portfolio_id
-    AND YEAR(a.aum_date) = m.y
-    AND MONTH(a.aum_date) = m.m;
+SELECT * FROM dados_final;
