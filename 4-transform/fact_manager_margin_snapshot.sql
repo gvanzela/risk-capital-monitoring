@@ -1,6 +1,3 @@
-SELECT *
-FROM fact_manager_margin_snapshot
-WHERE load_timestamp = (
-    SELECT MAX(load_timestamp)
-    FROM fact_manager_margin_snapshot
-);
+SELECT * 
+    FROM TB_ENQ_MARGEM_GESTOR_SNAPSHOT
+WHERE dt_carga = (SELECT MAX(dt_carga) FROM TB_ENQ_MARGEM_GESTOR_SNAPSHOT);
