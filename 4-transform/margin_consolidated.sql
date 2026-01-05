@@ -1,215 +1,221 @@
-WITH pl AS (
-    SELECT
-        s.portfolio_id,
-        s.fund_name,
-        s.fund_class,
-        s.manager_name,
-        s.investor_type,
-        s.aum_value,
-        s.load_timestamp AS load_pl
-    FROM fact_funds_aum_snapshot AS s
-    WHERE s.load_timestamp = (
-        SELECT MAX(load_timestamp)
-        FROM fact_funds_aum_snapshot
-    )
+WITH 
+
+/* -------------------- CARGAS ORIGINAIS -------------------- */
+
+PL AS (
+    SELECT 
+        CAST(p.cgePortfolio AS SIGNED) AS cgePortfolio,
+        p.nomeFundo,
+        p.descClasseCvm,
+        p.nomeGestor,
+        p.publicoAlvo,
+        CAST(p.pl AS DECIMAL(20,2)) AS pl,
+        p.dt_carga AS dt_carga_pl
+    FROM TB_ENQ_PL_SNAPSHOT p
+    WHERE p.nomeGestor NOT LIKE '%BTG%'
+      AND p.dt_carga = (SELECT MAX(dt_carga) FROM TB_ENQ_PL_SNAPSHOT)
 ),
 
-exposure AS (
-    SELECT
-        e.portfolio_id,
-        e.exposure_type,
-        e.load_timestamp AS load_exposure
-    FROM fact_funds_exposure_snapshot AS e
-    WHERE e.load_timestamp = (
-        SELECT MAX(load_timestamp)
-        FROM fact_funds_exposure_snapshot
-    )
+EXPOSI AS (
+    SELECT 
+        CAST(e.CgePortfolio AS SIGNED) AS cgePortfolio,
+        e.origem,
+        e.dt_carga AS dt_carga_exposi
+    FROM TB_ENQ_EXPOSI_RISCO_SNAPSHOT e
+    WHERE e.dt_carga = (SELECT MAX(dt_carga) FROM TB_ENQ_EXPOSI_RISCO_SNAPSHOT)
 ),
 
-margin AS (
-    SELECT
-        m.portfolio_id,
-        m.sent_date,
-        m.local_margin,
-        m.offshore_margin,
-        m.load_timestamp AS load_margin
-    FROM fact_manager_margin_snapshot AS m
-    WHERE m.load_timestamp = (
-        SELECT MAX(load_timestamp)
-        FROM fact_manager_margin_snapshot
-    )
+ENTUBA AS (
+    SELECT 
+        CAST(m.CgePortfolio AS SIGNED) AS cgePortfolio,
+        CAST(m.DataEnvio AS DATE) AS DataEnvio,
+        CAST(m.MargemLocal AS DECIMAL(20,2)) AS MargemLocal,
+        CAST(m.MargemOffshore AS DECIMAL(20,2)) AS MargemOffshore,
+        m.dt_carga AS dt_carga_entuba
+    FROM TB_ENQ_MARGEM_GESTOR_SNAPSHOT m
+    WHERE m.dt_carga = (SELECT MAX(dt_carga) FROM TB_ENQ_MARGEM_GESTOR_SNAPSHOT)
 ),
 
-validation AS (
-    SELECT
-        v.portfolio_id,
-        MAX(v.validation_date) AS last_validation_date,
-        MAX(v.validation_status) AS validation_status
-    FROM fact_margin_validation AS v
-    WHERE v.load_timestamp = (
-        SELECT MAX(load_timestamp)
-        FROM fact_margin_validation
-    )
-    GROUP BY v.portfolio_id
+V AS (
+    SELECT 
+        CAST(cge AS SIGNED) AS cge,
+        MAX(CAST(data AS DATE)) AS data_validacao,
+        MAX(status_valid) AS status_valid
+    FROM TB_ENQ_VALIDACAO_MARGEM
+    WHERE dt_carga = (SELECT MAX(dt_carga) FROM TB_ENQ_VALIDACAO_MARGEM)
+    GROUP BY CAST(cge AS SIGNED)
 ),
 
-exceptions AS (
+E AS (
+    SELECT CAST(cge AS SIGNED) AS cge, status
+    FROM TB_ENQ_EXCECOES_MARGEM
+),
+
+BASE AS (
     SELECT
-        e.portfolio_id,
-        e.exception_flag
-    FROM fact_margin_exceptions AS e
-)
+        PL.*,
+        EXPOSI.origem,
+        ENTUBA.DataEnvio,
+        ENTUBA.MargemLocal,
+        ENTUBA.MargemOffshore,
+        EXPOSI.dt_carga_exposi,
+        ENTUBA.dt_carga_entuba
+    FROM PL
+    LEFT JOIN EXPOSI ON PL.cgePortfolio = EXPOSI.cgePortfolio
+    LEFT JOIN ENTUBA ON PL.cgePortfolio = ENTUBA.cgePortfolio
+),
 
-,
+/* -------------------- DERIVADOS -------------------- */
 
-base AS (
+DERIVADO AS (
     SELECT
-        pl.portfolio_id,
-        pl.fund_name,
-        pl.fund_class,
-        pl.manager_name,
-        pl.investor_type,
-        pl.aum_value,
+        b.*,
+        V.data_validacao,
+        V.status_valid,
+        COALESCE(E.status,0) AS status,
 
-        exposure.exposure_type,
-        margin.sent_date,
-        margin.local_margin,
-        margin.offshore_margin,
+        CASE 
+            WHEN b.DataEnvio IS NULL AND V.data_validacao IS NOT NULL THEN V.data_validacao
+            ELSE b.DataEnvio
+        END AS DataEnvioEfetiva,
 
-        pl.load_pl,
-        exposure.load_exposure,
-        margin.load_margin
+        CASE 
+            WHEN b.origem IN ('OTC OPC','OTC SWAP') THEN 'OTC'
+            WHEN b.origem = 'Fundo Offshore' THEN 'OFFSHORE'
+            ELSE 'N/A'
+        END AS exposicao_consolidada
 
-    FROM pl
-    LEFT JOIN exposure ON pl.portfolio_id = exposure.portfolio_id
-    LEFT JOIN margin   ON pl.portfolio_id = margin.portfolio_id
+    FROM BASE b
+    LEFT JOIN V ON b.cgePortfolio = V.cge
+    LEFT JOIN E ON b.cgePortfolio = E.cge
+),
+
+/* -------------------- PERIODICIDADE -------------------- */
+
+PER AS (
+    SELECT
+        *,
+        CASE 
+            WHEN exposicao_consolidada = 'OTC' AND publicoAlvo = 'Não qualificado' THEN 7
+            WHEN exposicao_consolidada = 'OTC' AND publicoAlvo = 'Qualificado' THEN 30
+            WHEN exposicao_consolidada = 'OTC' AND publicoAlvo = 'Investidor Profissional' THEN 90
+            WHEN exposicao_consolidada = 'OFFSHORE' THEN 30
+            ELSE NULL
+        END AS periodicidade_dias
+    FROM DERIVADO
+),
+
+/* -------------------- FLAG ENVIO POR VALIDAÇÃO -------------------- */
+
+FINAL AS (
+    SELECT
+        *,
+        CASE
+            WHEN DataEnvio IS NULL
+             AND data_validacao IS NOT NULL
+             AND exposicao_consolidada IN ('OTC','OFFSHORE')
+                THEN 1
+            ELSE 0
+        END AS flag_envio_por_validacao
+    FROM PER
+),
+
+/* -------------------- ORDEM (ROW_NUMBER) -------------------- */
+
+ORDEM AS (
+    SELECT
+        f.*,
+        ROW_NUMBER() OVER (
+            ORDER BY 
+                CASE
+                    WHEN flag_envio_por_validacao = 1 AND DataEnvioEfetiva IS NULL THEN 1   -- 100% exposição
+                    WHEN DataEnvioEfetiva IS NULL THEN 2                                   -- sem envio
+                    ELSE 3
+                END,
+                DataEnvioEfetiva,
+                cgePortfolio
+        ) AS UltimoEnvio_Ordem
+    FROM FINAL f
 )
 
 SELECT
-    base.portfolio_id,
-    base.fund_name,
-    base.fund_class,
-    base.manager_name,
-    base.investor_type,
-    base.aum_value,
-    base.exposure_type,
+    cgePortfolio AS cge_fundo,
+    nomeFundo AS fundo,
+    descClasseCvm AS desc_classe_cvm,
+    nomeGestor,
+    publicoAlvo,
+    pl,
+    origem,
 
-    /* DATA EFETIVA */
-    CASE
-        WHEN base.sent_date IS NULL AND validation.last_validation_date IS NOT NULL
-            THEN validation.last_validation_date
-        ELSE base.sent_date
-    END AS effective_sent_date,
+    DataEnvioEfetiva,
+    DataEnvio,
+    data_validacao,
+    MargemLocal,
+    MargemOffshore,
+    periodicidade_dias,
 
-    base.sent_date,
-    validation.last_validation_date,
+    CASE 
+        WHEN DataEnvioEfetiva IS NULL THEN NULL
+        ELSE DATE_ADD(DataEnvioEfetiva, INTERVAL periodicidade_dias DAY)
+    END AS data_limite_proximo_envio,
 
-    base.local_margin,
-    base.offshore_margin,
-
-    /* PERIODICITY RULE */
-    CASE
-        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'RETAIL'  THEN 7
-        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'QUALIFIED' THEN 30
-        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'PROFESSIONAL' THEN 90
-        WHEN base.exposure_type = 'OFFSHORE' THEN 30
-        ELSE NULL
-    END AS periodicity_days,
-
-    /* DUE DATE CALC */
-    CASE
-        WHEN effective_sent_date IS NULL THEN NULL
-        ELSE DATE_ADD(
-            effective_sent_date,
-            INTERVAL (
-                CASE
-                    WHEN base.exposure_type = 'OTC' AND base.investor_type = 'RETAIL' THEN 7
-                    WHEN base.exposure_type = 'OTC' AND base.investor_type = 'QUALIFIED' THEN 30
-                    WHEN base.exposure_type = 'OTC' AND base.investor_type = 'PROFESSIONAL' THEN 90
-                    WHEN base.exposure_type = 'OFFSHORE' THEN 30
-                END
-            ) DAY
-        )
-    END AS next_due_date,
-
-    /* DAYS TO DUE */
-    CASE
-        WHEN effective_sent_date IS NULL THEN NULL
+    CASE 
+        WHEN DataEnvioEfetiva IS NULL THEN NULL
         ELSE DATEDIFF(
-            DATE_ADD(
-                effective_sent_date,
-                INTERVAL (
-                    CASE
-                        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'RETAIL' THEN 7
-                        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'QUALIFIED' THEN 30
-                        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'PROFESSIONAL' THEN 90
-                        WHEN base.exposure_type = 'OFFSHORE' THEN 30
-                    END
-                ) DAY
-            ),
-            CURDATE()
-        )
-    END AS days_to_due,
+                DATE_ADD(DataEnvioEfetiva, INTERVAL periodicidade_dias DAY),
+                CURDATE()
+             )
+    END AS dias_para_limite,
 
-    /* DEADLINE STATUS */
     CASE
-        WHEN base.exposure_type NOT IN ('OTC', 'OFFSHORE') THEN 'N/A'
-        WHEN effective_sent_date IS NULL THEN 'NO_SENT'
-        WHEN CURDATE() <= DATE_ADD(
-                effective_sent_date,
-                INTERVAL (
-                    CASE
-                        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'RETAIL' THEN 7
-                        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'QUALIFIED' THEN 30
-                        WHEN base.exposure_type = 'OTC' AND base.investor_type = 'PROFESSIONAL' THEN 90
-                        WHEN base.exposure_type = 'OFFSHORE' THEN 30
-                    END
-                ) DAY
-            )
-            THEN 'ON_TIME'
-        ELSE 'LATE'
-    END AS deadline_status,
+        WHEN exposicao_consolidada = 'N/A' THEN 'N/A'
+        WHEN DataEnvioEfetiva IS NULL THEN 'Sem Envio'
+        WHEN CURDATE() <= DATE_ADD(DataEnvioEfetiva, INTERVAL periodicidade_dias DAY)
+            THEN 'Em Dia'
+        ELSE 'Pendente'
+    END AS status_prazo,
 
-    /* VALIDATION FLAG */
-    CASE
-        WHEN base.sent_date IS NULL
-         AND validation.last_validation_date IS NOT NULL
-         AND base.exposure_type IN ('OTC','OFFSHORE')
-            THEN 1
-        ELSE 0
-    END AS flag_sent_by_validation,
+    flag_envio_por_validacao,
+    CASE WHEN DataEnvio IS NOT NULL THEN 1 ELSE 0 END AS flag_envio,
+    CASE WHEN origem   IS NOT NULL THEN 1 ELSE 0 END AS flag_exposicao,
 
-    /* OTHER FLAGS */
-    CASE WHEN base.sent_date IS NOT NULL THEN 1 ELSE 0 END AS flag_sent,
-    CASE WHEN base.exposure_type IS NOT NULL THEN 1 ELSE 0 END AS flag_exposed,
+    COALESCE(MargemLocal,0) + COALESCE(MargemOffshore,0) AS margem_consolidada,
 
-    /* CONSOLIDATED MARGIN */
-    COALESCE(base.local_margin,0) + COALESCE(base.offshore_margin,0) AS consolidated_margin,
+    exposicao_consolidada,
+    status_valid,
+    status,
 
-    /* CONSOLIDATED EXPOSURE */
-    CASE
-        WHEN base.exposure_type = 'OTC' THEN 'OTC'
-        WHEN base.exposure_type = 'OFFSHORE' THEN 'OFFSHORE'
-        ELSE 'NONE'
-    END AS consolidated_exposure,
-
-    validation.validation_status,
-    exceptions.exception_flag,
-
-    /* FINAL STATUS */
-    CASE
-        WHEN validation.last_validation_date IS NOT NULL THEN 'VALIDATED'
-        WHEN exceptions.exception_flag = 1 THEN 'VALIDATED'
-        WHEN base.sent_date IS NOT NULL AND base.exposure_type IS NOT NULL AND validation.validation_status = 1 THEN 'VALIDATED'
-        WHEN base.sent_date IS NOT NULL AND base.exposure_type IS NOT NULL AND validation.validation_status = 0 THEN 'SENT_NOT_VALIDATED'
-        WHEN base.sent_date IS NULL AND base.exposure_type IS NOT NULL THEN 'NOT_SENT'
+    CASE 
+        WHEN data_validacao IS NOT NULL THEN 'Recebido e Validado'
+        WHEN status = 1 THEN 'Recebido e Validado'
+        WHEN DataEnvio IS NOT NULL AND origem IS NOT NULL AND status_valid = 1 THEN 'Recebido e Validado'
+        WHEN DataEnvio IS NOT NULL AND origem IS NOT NULL AND COALESCE(status_valid,0) = 0 THEN 'Recebido e N/ Validado'
+        WHEN DataEnvio IS NULL AND origem IS NOT NULL THEN 'Não Recebido'
         ELSE 'N/A'
-    END AS status_final,
+    END AS status_envio,
 
-    base.load_pl,
-    base.load_exposure,
-    base.load_margin
+    CASE
+        WHEN flag_envio_por_validacao = 1 AND DataEnvioEfetiva IS NULL
+            THEN '100% da Exposição'
+        ELSE DATE_FORMAT(DataEnvioEfetiva, '%d/%m/%Y')
+    END AS UltimoEnvio_Ajustado,
 
-FROM base
-LEFT JOIN validation ON base.portfolio_id = validation.portfolio_id
-LEFT JOIN exceptions ON base.portfolio_id = exceptions.portfolio_id;
+    CASE
+        WHEN flag_envio_por_validacao = 1 THEN 'N/A'
+        ELSE 
+            CASE
+                WHEN exposicao_consolidada = 'N/A' THEN 'N/A'
+                WHEN DataEnvioEfetiva IS NULL THEN 'Sem Envio'
+                WHEN CURDATE() <= DATE_ADD(DataEnvioEfetiva, INTERVAL periodicidade_dias DAY)
+                    THEN 'Em Dia'
+                ELSE 'Pendente'
+            END
+    END AS StatusPrazo_Ajustado,
+
+    UltimoEnvio_Ordem,
+
+    dt_carga_pl,
+    dt_carga_exposi,
+    dt_carga_entuba
+
+FROM ORDEM;
