@@ -1,2 +1,2 @@
 SELECT *
-FROM fact_margin_exceptions;
+FROM TB_ENQ_EXCECOES_MARGEM;
