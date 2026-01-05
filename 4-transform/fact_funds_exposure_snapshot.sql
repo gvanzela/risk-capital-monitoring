@@ -1,6 +1,7 @@
-SELECT *
-FROM fact_funds_exposure_snapshot
-WHERE load_timestamp = (
-    SELECT MAX(load_timestamp)
-    FROM fact_funds_exposure_snapshot
+SELECT
+    *
+FROM TB_ENQ_EXPOSI_RISCO_SNAPSHOT
+WHERE dt_carga = (
+    SELECT MAX(dt_carga)
+    FROM TB_ENQ_EXPOSI_RISCO_SNAPSHOT
 );
