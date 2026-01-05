@@ -1,6 +1,6 @@
 SELECT *
-FROM fact_margin_validation
+FROM TB_ENQ_VALIDACAO_MARGEM
 WHERE load_timestamp = (
-    SELECT MAX(load_timestamp)
-    FROM fact_margin_validation
+    SELECT MAX(dt_carga)
+    FROM TB_ENQ_VALIDACAO_MARGEM
 );
