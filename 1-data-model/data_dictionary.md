@@ -1,134 +1,160 @@
-# Data Dictionary  
-_Comprehensive documentation for the analytical data model used in the Risk Capital Monitoring System._
+# Data Dictionary — Risk Capital Data Platform
+
+This document describes the database tables produced and consumed by the Risk Capital automation jobs.  
+The schema and definitions below are derived directly from the implementation (`jobs.py`) and reflect the actual operational data model.
+
+The platform follows an **append-only**, **audit-friendly** design, prioritizing traceability, historical replay, and analytical reliability.
 
 ---
 
-## 1. FUNDS_AUM_SNAPSHOT
-*(full fund snapshot for risk & AUM monitoring)*
+## Overview of Tables
 
-| Generic Column        | Type      | Description |
-|-----------------------|-----------|-------------|
-| fund_id               | INT       | Unique identifier of the fund |
-| as_of_date            | DATE      | Official reference date of the snapshot |
-| fund_name             | TEXT      | Fund’s legal name |
-| fund_cnpj             | TEXT      | Registration number / identifier |
-| manager_name          | TEXT      | Name of the asset manager |
-| investor_type         | TEXT      | Investor category (Retail, Qualified, Professional) |
-| portfolio_type        | TEXT      | Portfolio type / structure |
-| fund_class            | TEXT      | CVM / regulatory class |
-| fund_class_desc       | TEXT      | Additional class description |
-
-### Financial & Risk Metrics
-| Generic Column        | Type        | Description |
-|-----------------------|-------------|-------------|
-| aum_value             | DECIMAL     | Total AUM (Assets Under Management) |
-| liquidity_ratio       | DECIMAL     | Fund liquidity indicator |
-| return_daily          | DECIMAL     | Daily return (%) |
-| return_monthly        | DECIMAL     | MTD return (%) |
-| return_ytd            | DECIMAL     | YTD return (%) |
-| risk_rating           | TEXT        | Internal or external risk rating |
-| var_95                | DECIMAL     | 95% Value-at-Risk |
-| var_99                | DECIMAL     | 99% Value-at-Risk |
-
-### Operational
-| Generic Column        | Type        | Description |
-|-----------------------|-------------|-------------|
-| snapshot_timestamp    | DATETIME    | Load timestamp (ETL ingestion time) |
+| Table | Description |
+|------|-------------|
+| `TB_ENQ_MARGEM_GESTOR_SNAPSHOT` | Daily snapshot of margin metrics by manager |
+| `TB_ENQ_PL_SNAPSHOT` | Daily snapshot of fund-level PL and risk indicators |
+| `TB_ENQ_PL_HISTORICO` | Historical daily PL by fund |
+| `TB_ENQ_POSICOES_FUNDOS_EXPOSTOS` | Detailed fund positions (OTC, Offshore, Swaps) |
+| `TB_ENQ_EXPOSI_RISCO_SNAPSHOT` | Snapshot of funds exposed by risk origin |
 
 ---
 
-## 2. FUNDS_AUM_HISTORY  
-**Description:** Monthly AUM evolution (opening/closing values by fund).
+## TB_ENQ_MARGEM_GESTOR_SNAPSHOT
 
-| Generic Column       | Type      | Description                                    |
-|----------------------|-----------|------------------------------------------------|
-| fund_id              | INT       | Fund identifier                                |
-| reference_date       | DATE      | Month reference date                           |
-| aum_open_value       | DECIMAL   | Opening AUM for the month                      |
-| aum_close_value      | DECIMAL   | Closing AUM for the month                      |
-| snapshot_timestamp   | DATETIME  | Ingestion timestamp                            |
+**Description**  
+Stores daily margin snapshots by manager, sourced from Metabase queries.
 
----
+### Columns
 
-## 3. FUNDS_POSITIONS_SNAPSHOT  
-**Description:** Full portfolio composition snapshot (per fund per date).
+| Column | Description |
+|------|------------|
+| `DataEnvio` | Reference date of the margin data |
+| `MargemLocal` | Local margin amount |
+| `MargemOffshore` | Offshore margin amount |
+| `dt_carga` | Load timestamp |
 
-| Generic Column       | Type      | Description                                      |
-|----------------------|-----------|--------------------------------------------------|
-| fund_id              | INT       | Fund identifier                                  |
-| portfolio_date       | DATE      | Portfolio reference date                         |
-| notional_value       | DECIMAL   | Gross notional of the position                   |
-| price_value          | DECIMAL   | Market price used                                |
-| quantity             | DECIMAL   | Position size / quantity                         |
-| market_value         | DECIMAL   | Mark-to-market value (qty × price)               |
-| asset_id             | INT       | Internal asset identifier                         |
-| isin_code            | TEXT      | ISIN                                              |
-| asset_type_code      | INT       | Asset class/type code                             |
-| asset_alias          | TEXT      | Short asset name                                  |
-| asset_category       | TEXT      | Category (equity, FI, derivatives, offshore…)    |
-| snapshot_timestamp   | DATETIME  | Ingestion timestamp                               |
+### Keys
+- Natural key (inferred): `DataEnvio`, `dt_carga`
+- Primary key: not explicitly defined
 
 ---
 
-## 4. RISK_EXPOSURE_SNAPSHOT  
-**Description:** Exposure type (OTC, SWAP, Offshore) for each fund.
+## TB_ENQ_PL_SNAPSHOT
 
-| Generic Column       | Type      | Description                            |
-|----------------------|-----------|----------------------------------------|
-| fund_id              | INT       | Fund identifier                        |
-| exposure_origin      | TEXT      | Exposure type (OTC, SWAP, Offshore)    |
-| reference_date       | DATE      | Exposure date                           |
-| snapshot_timestamp   | DATETIME  | Ingestion timestamp                     |
+**Description**  
+Daily snapshot of fund-level PL, liquidity, derivatives exposure, and risk metrics.
 
----
+### Main Columns
 
-## 5. MANAGER_MARGIN_SNAPSHOT  
-**Description:** Daily margin submission from portfolio managers.
+| Column | Description |
+|------|------------|
+| `cgePortfolio` | Fund identifier |
+| `nomeFundo` | Fund name |
+| `cnpj` | Fund tax identifier |
+| `nomeGestor` | Fund manager |
+| `pl` | Net asset value |
+| `margemPl` | Margin relative to PL |
+| `derivativosPl` | Derivatives exposure relative to PL |
+| `liquidezPl` | Liquidity ratio |
+| `var95`, `var99` | Value-at-Risk metrics |
+| `criticidade` | Risk classification |
+| `dt_carga` | Load timestamp |
 
-| Generic Column       | Type      | Description                            |
-|----------------------|-----------|----------------------------------------|
-| fund_id              | INT       | Fund identifier                        |
-| submission_date      | DATE      | Date the manager submitted the margin |
-| margin_local         | DECIMAL   | Local market margin                    |
-| margin_offshore      | DECIMAL   | Offshore margin                        |
-| snapshot_timestamp   | DATETIME  | Ingestion timestamp                    |
-
----
-
-## 6. MARGIN_VALIDATION_LOG  
-**Description:** Internal validation log for submitted margins.
-
-| Generic Column       | Type      | Description                                   |
-|----------------------|-----------|-----------------------------------------------|
-| fund_id              | INT       | Fund identifier                               |
-| validation_date      | DATE      | Date the validation was performed            |
-| validation_flag      | TINYINT   | 1 = validated, 0 = rejected                   |
-| snapshot_timestamp   | DATETIME  | Ingestion timestamp                           |
+### Keys
+- Natural key (inferred): `cgePortfolio`, `dataProcessamento`
+- Primary key: not explicitly defined
 
 ---
 
-## 7. MARGIN_EXCEPTIONS  
-**Description:** Exceptions or overrides applied to margin submissions.
+## TB_ENQ_PL_HISTORICO
 
-| Generic Column       | Type      | Description                           |
-|----------------------|-----------|---------------------------------------|
-| fund_id              | INT       | Fund identifier                        |
-| exception_flag       | TINYINT   | Override indicator (1 = exception)     |
+**Description**  
+Stores the historical daily PL evolution for each fund.
+
+### Columns
+
+| Column | Description |
+|------|------------|
+| `cgePortfolio` | Fund identifier |
+| `data` | Portfolio reference date |
+| `patrimonio_abertura` | Opening PL |
+| `patrimonio_fechamento` | Closing PL |
+| `dt_carga` | Load timestamp |
+
+### Keys
+- Natural key: `cgePortfolio`, `data`
+- Suggested primary key: (`cgePortfolio`, `data`)
 
 ---
 
-## 8. ASSET_TYPE_MAPPING  
-**Description:** Mapping between asset type codes and readable descriptions.
+## TB_ENQ_POSICOES_FUNDOS_EXPOSTOS
 
-| Generic Column       | Type      | Description                                     |
-|----------------------|-----------|-------------------------------------------------|
-| asset_type_code      | INT       | Numeric type code                               |
-| asset_type_desc      | TEXT      | Human-readable description (e.g., Option, FI)   |
+**Description**  
+Core positions table containing detailed exposures for OTC, Offshore, and Swap instruments.  
+Each execution inserts a full, timestamped snapshot of positions.
+
+### Main Columns
+
+| Column | Description |
+|------|------------|
+| `Nickname` | Asset identifier |
+| `DataCarteira` | Position reference date |
+| `CgePortfolio` | Fund identifier |
+| `notional` | Notional amount |
+| `valorfinanceiro` | Financial value |
+| `qtyposicao` | Position quantity |
+| `NmClassificacao` | Exposure type (OTC, Offshore, Swap) |
+| `NuIsin` | ISIN code |
+| `CodAtivo` | Asset code |
+| `CodTipoAtivo` | Asset type code |
+| `dt_carteira` | Portfolio date |
+| `dt_insercao` | Batch insertion timestamp |
+
+### Keys
+- Batch identifier: `dt_insercao`
+- Natural composite key (inferred):  
+  `CgePortfolio`, `Nickname`, `DataCarteira`, `dt_insercao`
+- Primary key: not explicitly defined (append-only design)
 
 ---
 
-## Notes
-- All timestamps refer to ingestion time, not portfolio or market timestamps.  
-- The model is normalized but intentionally simple to make the project easy to understand and reproduce.  
-- Column names follow a consistent naming convention across tables.
+## TB_ENQ_EXPOSI_RISCO_SNAPSHOT
 
+**Description**  
+Derived snapshot identifying which funds are exposed to each risk origin, based on the latest positions load.
+
+### Columns
+
+| Column | Description |
+|------|------------|
+| `cgePortfolio` | Fund identifier |
+| `origem` | Exposure origin |
+| `dt_carga` | Load timestamp |
+
+### Keys
+- Natural key: `cgePortfolio`, `dt_carga`
+- Suggested primary key: (`cgePortfolio`, `dt_carga`)
+
+---
+
+## Design Notes
+
+- All tables follow an **append-only** strategy
+- No hard primary keys are enforced at the database level
+- Data integrity relies on:
+  - reference dates
+  - load timestamps (`dt_carga`, `dt_insercao`)
+- The model is optimized for:
+  - auditability
+  - historical reconstruction
+  - analytical workloads (BI / risk monitoring)
+
+---
+
+## Source
+
+This data dictionary was derived directly from the production codebase:
+- `jobs.py`
+- `app.py`
+
+No external assumptions or manual schema adjustments were applied.
