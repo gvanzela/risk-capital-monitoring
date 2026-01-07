@@ -8,7 +8,7 @@ This repository represents a **production-oriented architecture**, rebuilt from 
 
 ## Overview
 
-The project models the full lifecycle of a risk capital monitoring platform:
+This project models the full lifecycle of a risk capital monitoring platform:
 
 - Data ingestion from multiple sources (APIs, snapshots)
 - Consolidation of fund positions, AUM, and margin data
@@ -26,12 +26,11 @@ The goal is to demonstrate **how to design, organize, and operate a real data pl
 risk-capital-monitoring/
 │
 ├── 1-data-model/            # SQL schema and data dictionary
-├── 2-api-simulation/        # Mock APIs and sample payloads
-├── 3-etl-pipelines/
+├── 2-etl-pipelines/
 │   ├── app/                 # Current runtime architecture (active)
 │   └── old/                 # Legacy / deprecated ETL code
-├── 4-transform/             # SQL transformations and business logic
-├── 5-bi/                    # BI layer (mock dashboards, metrics, notes)
+├── 3-transform/             # SQL transformations and business logic
+├── 4-bi/                    # BI layer (mock dashboards, metrics, notes)
 │
 └── README.md
 ```
@@ -43,14 +42,14 @@ risk-capital-monitoring/
 The **active execution layer** lives inside:
 
 ```
-3-etl-pipelines/app/
+2-etl-pipelines/app/
 ```
 
-This folder contains the current, production-style architecture.
+This folder contains the current, production-style runtime.
 
 ```
 app/
-├── main.py      # Orchestration layer (execution order, UI entry point)
+├── main.py      # Orchestration layer (execution order, entry point)
 ├── jobs.py      # Business jobs (ETL, snapshots, validations, backup)
 ├── config.py    # Environment configuration and constants
 ├── db.py        # Database engines and connections
@@ -107,7 +106,7 @@ Jobs are designed to be:
 
 ## Transformations
 
-The `4-transform/` folder centralizes all **SQL-based business logic**, including:
+The `3-transform/` folder centralizes all **SQL-based business logic**, including:
 
 - Exposure consolidation
 - Risk aggregation
@@ -120,7 +119,7 @@ This layer represents the **analytical backbone** of the platform.
 
 ## BI Layer
 
-The `5-bi/` folder contains:
+The `4-bi/` folder contains:
 
 - Mock dashboards
 - KPI definitions
@@ -135,7 +134,7 @@ It mirrors how a real monitoring dashboard would be structured, even when using 
 
 All credentials, endpoints, and sensitive parameters are provided via environment variables.
 
-A typical setup includes:
+Typical configuration includes:
 
 - Database connections (remote and local)
 - API endpoints
@@ -148,13 +147,14 @@ Secrets are intentionally excluded from version control.
 
 ## Execution
 
-The system can be executed via the main orchestrator:
+From the project root:
 
 ```bash
+cd 2-etl-pipelines
 python -m app.main
 ```
 
-This launches the orchestration layer responsible for running individual jobs or full pipelines.
+This launches the orchestration layer responsible for running individual jobs or the full pipeline.
 
 ---
 
@@ -164,7 +164,7 @@ This project exists to:
 
 **Demonstrate how I design and operate a complete risk data platform — from ingestion to analytics — using clean, structured, and production-grade engineering practices.**
 
-It is not a toy example, nor a full production dump, but a **faithful architectural representation**.
+It is not a toy example, nor a production dump, but a **faithful architectural representation**.
 
 ---
 
