@@ -1,158 +1,175 @@
-# Risk Capital Monitoring — End-to-End Data Engineering Case
+# Risk Capital Monitoring
 
-This repository is a fictional but technically accurate reconstruction of a full risk-monitoring pipeline.  
-It is **inspired by a real risk architecture I designed and maintain in production**, but all data, logic, and structures shown here are simplified and fully generic for public demonstration.
+End-to-end data engineering project for **risk capital monitoring**, focused on fund exposure, AUM tracking, margin validation, and regulatory risk analytics.
 
-The goal is straightforward: show how I design data models, build ingestion pipelines, structure ETL flows, and organize a BI layer around real business logic.
-
----
-
-## 1. What this project covers
-
-This case walks through the complete lifecycle of a risk-capital monitoring system:
-
-- A clean and minimal **MySQL data model**
-- Synthetic **API simulations**
-- Multiple **ETL ingestion pipelines**
-- **Transformations** that consolidate risk exposure, AUM, positions, and margin flows
-- A **BI layer** (mocked) that represents the final analytical view
-
-The intention is not to replicate a massive production system, but to demonstrate structured, real engineering practices in an understandable and reproducible way.
+This repository represents a **production-oriented architecture**, rebuilt from a real system and adapted for public demonstration with generic data and endpoints.
 
 ---
 
-## 2. Architecture Overview
+## Overview
 
-Below is a simplified view of the workflow implemented in this project:
+The project models the full lifecycle of a risk capital monitoring platform:
 
-      +---------------------------+
-      |        Fake APIs          |
-      | (positions, AUM, margin)  |
-      +-------------+-------------+
-                    |
-                    v
-         +---------------------+
-         |    ETL Pipelines    |
-         |  (3-etl-pipelines/) |
-         +---------+-----------+
-                   |
-                   v
-      +-----------------------------+
-      |        MySQL Database       |
-      |  (1-data-model/schema)      |
-      +-----------------------------+
-                   |
-                   v
-       +--------------------------+
-       |   SQL Transformations    |
-       |      (4-transform/)      |
-       +-------------+------------+
-                     |
-                     v
-             +---------------+
-             |    BI Layer   |
-             |    (5-bi/)    |
-             +---------------+
+- Data ingestion from multiple sources (APIs, snapshots)
+- Consolidation of fund positions, AUM, and margin data
+- Exposure and risk calculations
+- Snapshot-based historical control
+- BI-ready analytical layer
 
-A clean and practical engineering flow — the same logic used in production systems, but in a lightweight format.
+The goal is to demonstrate **how to design, organize, and operate a real data platform**, not just isolated scripts.
 
 ---
 
-## 3. Repository Structure
+## Repository Structure
 
 ```
 risk-capital-monitoring/
 │
-├── 1-data-model/         # SQL schema and data dictionary
-├── 2-api-simulation/     # API mock + sample JSON payloads
-├── 3-etl-pipelines/      # Ingestion pipelines (Python)
-├── 4-transform/          # SQL logic for exposure & margin consolidation
-├── 5-bi/                 # BI mock, DAX notes, screenshots
+├── 1-data-model/            # SQL schema and data dictionary
+├── 2-api-simulation/        # Mock APIs and sample payloads
+├── 3-etl-pipelines/
+│   ├── app/                 # Current runtime architecture (active)
+│   └── old/                 # Legacy / deprecated ETL code
+├── 4-transform/             # SQL transformations and business logic
+├── 5-bi/                    # BI layer (mock dashboards, metrics, notes)
 │
 └── README.md
 ```
 
-Each folder matches a real component of a data-engineering architecture.
+---
+
+## Current Runtime Architecture
+
+The **active execution layer** lives inside:
+
+```
+3-etl-pipelines/app/
+```
+
+This folder contains the current, production-style architecture.
+
+```
+app/
+├── main.py      # Orchestration layer (execution order, UI entry point)
+├── jobs.py      # Business jobs (ETL, snapshots, validations, backup)
+├── config.py    # Environment configuration and constants
+├── db.py        # Database engines and connections
+├── auth.py      # Authentication helpers
+└── __init__.py
+```
+
+### Design Principles
+
+- Clear separation of concerns  
+- Deterministic and auditable logic  
+- Snapshot-based processing (idempotent jobs)  
+- Environment-driven configuration (no secrets in code)  
+- Safe re-execution of partial pipelines  
 
 ---
 
-## 4. Data Model (High-Level)
+## Data Model
 
-The system is modeled using a minimal relational schema.  
-It captures the core entities of a risk-capital monitoring workflow:
+The data model is intentionally **lean and explicit**, covering core risk entities such as:
 
-- **AUM snapshots**
-- **AUM monthly history**
-- **Fund positions**
-- **Risk exposure (OTC / Offshore)**
-- **Manager’s margin submissions**
-- **Validation logs**
-- **Exceptions**
-- **Asset type mapping**
+- Fund AUM snapshots and history
+- Fund positions (OTC, swaps, offshore)
+- Risk exposure snapshots
+- Manager margin submissions
+- Validation logs and exceptions
 
-Tables include:
+All tables, columns, and relationships are documented in:
 
-- `FUNDS_AUM_SNAPSHOT`
-- `FUNDS_AUM_HISTORY`
-- `FUNDS_POSITIONS_SNAPSHOT`
-- `RISK_EXPOSURE_SNAPSHOT`
-- `MANAGER_MARGIN_SNAPSHOT`
-- `MARGIN_VALIDATION_LOG`
-- `MARGIN_EXCEPTIONS`
-- `ASSET_TYPE_MAPPING`
-
-This schema intentionally stays lean — the point is clarity, not volume.
+```
+1-data-model/
+```
 
 ---
 
-## 5. ETL Pipelines
+## ETL and Jobs
 
-The ingestion layer is organized the same way I structure pipelines in real environments:
+The ETL layer is implemented as **explicit jobs**, each responsible for a single concern:
 
-- API requests with retry logic  
-- Data validation  
-- Cleaning and type standardization  
-- Snapshot logic  
-- Incremental loading into MySQL  
+- Margin ingestion
+- AUM snapshot
+- AUM historical load
+- Fund positions ingestion
+- Swap processing
+- Exposure snapshot reconstruction
+- Full remote → local database replication (backup)
 
-Each pipeline is isolated and easy to read.
-
----
-
-## 6. Transformations
-
-The transformations folder centralizes the SQL logic used to:
-
-- consolidate exposure across funds
-- merge AUM + positions + margin
-- detect missing submissions
-- compute up-to-date margin status
-
-This is the “business logic” backbone of the system.
+Jobs are designed to be:
+- Re-runnable
+- Batch-consistent
+- Independent where possible
 
 ---
 
-## 7. BI Layer
+## Transformations
 
-To keep the case complete, this repository includes:
+The `4-transform/` folder centralizes all **SQL-based business logic**, including:
 
-- BI mock screens  
-- Notes on KPIs  
-- DAX formulas (simplified)  
-- Explanation of business metrics  
+- Exposure consolidation
+- Risk aggregation
+- Cross-table joins for analytics
+- BI-ready views and queries
 
-The structure mirrors how a real monitoring dashboard is organized, even when using synthetic data.
+This layer represents the **analytical backbone** of the platform.
 
 ---
 
-## 8. Goal of This Project
+## BI Layer
 
-This repository exists for a clear purpose:
+The `5-bi/` folder contains:
 
-**Show, end-to-end, how I design and implement a complete data workflow in a clean, structured, and production-oriented way.**
+- Mock dashboards
+- KPI definitions
+- Metric explanations
+- Notes on analytical design
 
-Everything here reflects how I work in real systems —  
-only adapted into a simple, public, and reproducible case.
+It mirrors how a real monitoring dashboard would be structured, even when using synthetic data.
 
-If you want a deeper explanation of any step or logic, feel free to reach out.
+---
 
+## Configuration
+
+All credentials, endpoints, and sensitive parameters are provided via environment variables.
+
+A typical setup includes:
+
+- Database connections (remote and local)
+- API endpoints
+- Authentication tokens
+- Runtime parameters (timeouts, retries, SSL flags)
+
+Secrets are intentionally excluded from version control.
+
+---
+
+## Execution
+
+The system can be executed via the main orchestrator:
+
+```bash
+python -m app.main
+```
+
+This launches the orchestration layer responsible for running individual jobs or full pipelines.
+
+---
+
+## Purpose of This Repository
+
+This project exists to:
+
+**Demonstrate how I design and operate a complete risk data platform — from ingestion to analytics — using clean, structured, and production-grade engineering practices.**
+
+It is not a toy example, nor a full production dump, but a **faithful architectural representation**.
+
+---
+
+## Disclaimer
+
+All data, endpoints, and identifiers in this repository are **generic or simulated**.
+
+This repository is intended for **technical demonstration and architectural discussion only**.
