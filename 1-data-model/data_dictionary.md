@@ -1,7 +1,9 @@
 # Data Dictionary — Risk Capital Data Platform
 
-This document describes the database tables produced and consumed by the Risk Capital automation jobs.  
-The schema and definitions below are derived directly from the implementation (`jobs.py`) and reflect the actual operational data model.
+This document describes the **intentionally designed data model** used by the Risk Capital monitoring platform.
+
+All tables, columns, and relationships were **explicitly modeled** to support operational risk monitoring, auditability, and analytical consumption.  
+Although data is ingested from APIs and external systems, the **schema itself is authored and controlled**, not inferred or reverse-engineered.
 
 The platform follows an **append-only**, **audit-friendly** design, prioritizing traceability, historical replay, and analytical reliability.
 
@@ -22,7 +24,8 @@ The platform follows an **append-only**, **audit-friendly** design, prioritizing
 ## TB_ENQ_MARGEM_GESTOR_SNAPSHOT
 
 **Description**  
-Stores daily margin snapshots by manager, sourced from Metabase queries.
+Stores daily margin snapshots by manager.  
+Data is ingested from API queries, but the table structure and semantics are explicitly defined by the platform.
 
 ### Columns
 
@@ -31,18 +34,19 @@ Stores daily margin snapshots by manager, sourced from Metabase queries.
 | `DataEnvio` | Reference date of the margin data |
 | `MargemLocal` | Local margin amount |
 | `MargemOffshore` | Offshore margin amount |
-| `dt_carga` | Load timestamp |
+| `dt_carga` | Load timestamp identifying the execution batch |
 
 ### Keys
-- Natural key (inferred): `DataEnvio`, `dt_carga`
-- Primary key: not explicitly defined
+- Logical uniqueness: `DataEnvio`, `dt_carga`
+- Physical primary key: intentionally not enforced
 
 ---
 
 ## TB_ENQ_PL_SNAPSHOT
 
 **Description**  
-Daily snapshot of fund-level PL, liquidity, derivatives exposure, and risk metrics.
+Daily snapshot of fund-level PL, liquidity, derivatives exposure, and risk metrics.  
+Each execution produces a complete snapshot for analytical consistency.
 
 ### Main Columns
 
@@ -58,18 +62,18 @@ Daily snapshot of fund-level PL, liquidity, derivatives exposure, and risk metri
 | `liquidezPl` | Liquidity ratio |
 | `var95`, `var99` | Value-at-Risk metrics |
 | `criticidade` | Risk classification |
-| `dt_carga` | Load timestamp |
+| `dt_carga` | Load timestamp identifying the execution batch |
 
 ### Keys
-- Natural key (inferred): `cgePortfolio`, `dataProcessamento`
-- Primary key: not explicitly defined
+- Logical uniqueness: `cgePortfolio`, `dt_carga`
+- Physical primary key: intentionally not enforced
 
 ---
 
 ## TB_ENQ_PL_HISTORICO
 
 **Description**  
-Stores the historical daily PL evolution for each fund.
+Stores the historical daily PL evolution for each fund, preserving one record per fund per reference date.
 
 ### Columns
 
@@ -82,16 +86,17 @@ Stores the historical daily PL evolution for each fund.
 | `dt_carga` | Load timestamp |
 
 ### Keys
-- Natural key: `cgePortfolio`, `data`
-- Suggested primary key: (`cgePortfolio`, `data`)
+- Logical primary key: (`cgePortfolio`, `data`)
+- Designed to be stable and replayable
 
 ---
 
 ## TB_ENQ_POSICOES_FUNDOS_EXPOSTOS
 
 **Description**  
-Core positions table containing detailed exposures for OTC, Offshore, and Swap instruments.  
-Each execution inserts a full, timestamped snapshot of positions.
+Core positions table containing detailed exposures for OTC, Offshore, and Swap instruments.
+
+Each execution inserts a **full, timestamped snapshot**, enabling safe reprocessing and historical reconstruction.
 
 ### Main Columns
 
@@ -107,21 +112,23 @@ Each execution inserts a full, timestamped snapshot of positions.
 | `NuIsin` | ISIN code |
 | `CodAtivo` | Asset code |
 | `CodTipoAtivo` | Asset type code |
-| `dt_carteira` | Portfolio date |
-| `dt_insercao` | Batch insertion timestamp |
+| `dt_carteira` | Portfolio reference date |
+| `dt_insercao` | Execution batch timestamp |
 
 ### Keys
 - Batch identifier: `dt_insercao`
-- Natural composite key (inferred):  
+- Logical uniqueness within batch:  
   `CgePortfolio`, `Nickname`, `DataCarteira`, `dt_insercao`
-- Primary key: not explicitly defined (append-only design)
+- Physical primary key: intentionally not enforced (append-only strategy)
 
 ---
 
 ## TB_ENQ_EXPOSI_RISCO_SNAPSHOT
 
 **Description**  
-Derived snapshot identifying which funds are exposed to each risk origin, based on the latest positions load.
+Derived snapshot identifying which funds are exposed to each risk origin, based on the **latest complete positions batch**.
+
+This table is rebuilt per execution to guarantee batch-level consistency.
 
 ### Columns
 
@@ -129,32 +136,34 @@ Derived snapshot identifying which funds are exposed to each risk origin, based 
 |------|------------|
 | `cgePortfolio` | Fund identifier |
 | `origem` | Exposure origin |
-| `dt_carga` | Load timestamp |
+| `dt_carga` | Load timestamp matching the source batch |
 
 ### Keys
-- Natural key: `cgePortfolio`, `dt_carga`
-- Suggested primary key: (`cgePortfolio`, `dt_carga`)
+- Logical uniqueness: `cgePortfolio`, `dt_carga`
+- Designed for idempotent reconstruction
 
 ---
 
 ## Design Notes
 
+- The data model is **explicitly designed**, not inferred
 - All tables follow an **append-only** strategy
-- No hard primary keys are enforced at the database level
-- Data integrity relies on:
+- No hard primary keys are enforced by design
+- Consistency is guaranteed via:
   - reference dates
-  - load timestamps (`dt_carga`, `dt_insercao`)
-- The model is optimized for:
+  - execution timestamps (`dt_carga`, `dt_insercao`)
+- The model prioritizes:
   - auditability
-  - historical reconstruction
-  - analytical workloads (BI / risk monitoring)
+  - historical replay
+  - analytical and regulatory workloads
 
 ---
 
-## Source
+## Source of Truth
 
-This data dictionary was derived directly from the production codebase:
+This data dictionary reflects the **authoritative data model implemented by the platform**, as defined in:
+
 - `jobs.py`
-- `app.py`
+- `app/main.py`
 
-No external assumptions or manual schema adjustments were applied.
+The schema is authored intentionally to support the operational and analytical requirements of risk capital monitoring.
